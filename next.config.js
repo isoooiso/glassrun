@@ -2,12 +2,9 @@
 const nextConfig = {
   output: "export",
   images: { unoptimized: true },
-
-  // Для GitHub Pages:
-  basePath: process.env.NEXT_PUBLIC_BASE_PATH || "",
-  assetPrefix: process.env.NEXT_PUBLIC_BASE_PATH || "",
-
-  trailingSlash: true
+  basePath: "/glassrun",
+  assetPrefix: "/glassrun",
+  trailingSlash: true,
 };
 
 export default nextConfig;
