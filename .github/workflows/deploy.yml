@@ -26,7 +26,7 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Install (ci with fallback)
+      - name: Install
         run: |
           npm config set fund false
           npm config set audit false
@@ -37,7 +37,7 @@ jobs:
           npm config set fetch-timeout 300000
           npm ci || npm install
 
-      - name: Build (static export)
+      - name: Build
         env:
           NEXT_PUBLIC_GENLAYER_RPC_URL: ${{ vars.NEXT_PUBLIC_GENLAYER_RPC_URL }}
           NEXT_PUBLIC_CONTRACT_ADDRESS: ${{ vars.NEXT_PUBLIC_CONTRACT_ADDRESS }}
@@ -45,13 +45,12 @@ jobs:
           NEXT_PUBLIC_CHAIN_NAME: ${{ vars.NEXT_PUBLIC_CHAIN_NAME }}
         run: npm run build
 
-      - name: Verify export output
+      - name: Verify
         run: |
           test -f out/index.html
-          echo "out/index.html exists ✅"
           ls -la out | head -n 50
 
-      - name: Upload artifact
+      - name: Upload
         uses: actions/upload-pages-artifact@v3
         with:
           path: out
