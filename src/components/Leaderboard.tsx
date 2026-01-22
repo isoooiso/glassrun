@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Address, createPublicClient, custom } from "viem";
 import { useAccount } from "wagmi";
 import { CONTRACT_ADDRESS_RAW, hasValidContractAddress, glassRunAbi, getContractAddress } from "@/lib/contract";
@@ -32,7 +32,7 @@ export default function Leaderboard() {
       });
 
       const latest = await client.getBlockNumber();
-      const fromBlock = latest > 5_000n ? latest - 5_000n : 0n;
+      const fromBlock = latest > 500n ? latest - 500n : 0n;
 
       const runFinishedEvent = glassRunAbi.find((x: any) => x.type === "event" && x.name === "RunFinished") as any;
 
@@ -62,14 +62,9 @@ export default function Leaderboard() {
       setStatus("idle");
     } catch (e: any) {
       setStatus("error");
-      setErrorText(e?.message || "Failed to load leaderboard");
-      console.error(e);
+      setErrorText(e?.shortMessage || e?.message || "Failed to load leaderboard");
     }
   }
-
-  useEffect(() => {
-    if (isConnected) load();
-  }, [isConnected]);
 
   return (
     <div>
@@ -78,13 +73,15 @@ export default function Leaderboard() {
           <div className="text-xs text-white/50">Leaderboard</div>
           <div className="mt-1 text-lg font-medium">All-time (top 50)</div>
         </div>
-        <button className="btn btn-ghost" onClick={load} disabled={!canLoad || status === "loading"}>
+        <button className="btn btn-ghost" onClick={load} disabled={!isConnected || !canLoad || status === "loading"}>
           {status === "loading" ? "Loading..." : "Refresh"}
         </button>
       </div>
 
       {!canLoad ? (
-        <div className="mt-4 text-sm text-amber-200">{CONTRACT_ADDRESS_RAW ? "Contract address invalid." : "Contract address missing."}</div>
+        <div className="mt-4 text-sm text-amber-200">
+          {CONTRACT_ADDRESS_RAW ? "Contract address invalid." : "Contract address missing."}
+        </div>
       ) : !isConnected ? (
         <div className="mt-4 text-sm text-white/60">Connect wallet to load leaderboard.</div>
       ) : status === "error" ? (
@@ -92,7 +89,7 @@ export default function Leaderboard() {
           {errorText}
         </div>
       ) : rows.length === 0 ? (
-        <div className="mt-4 text-sm text-white/60">No runs yet.</div>
+        <div className="mt-4 text-sm text-white/60">Press Refresh to load last ~500 blocks.</div>
       ) : (
         <div className="mt-4 overflow-hidden rounded-2xl border border-white/10">
           <div className="grid grid-cols-[60px_1fr_100px] bg-white/5 px-4 py-2 text-xs text-white/50">
@@ -113,7 +110,7 @@ export default function Leaderboard() {
         </div>
       )}
 
-      <div className="mt-3 text-xs text-white/35">Scans last ~5k blocks.</div>
+      <div className="mt-3 text-xs text-white/35">Scans last ~500 blocks.</div>
     </div>
   );
 }
