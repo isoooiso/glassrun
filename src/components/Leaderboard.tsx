@@ -3,20 +3,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { Address, createPublicClient, custom } from "viem";
 import { useAccount } from "wagmi";
-import { CONTRACT_ADDRESS, hasValidContractAddress } from "@/lib/contract";
-import { glassRunAbi } from "@/lib/contract";
+import { CONTRACT_ADDRESS_RAW, hasValidContractAddress, glassRunAbi, getContractAddress } from "@/lib/contract";
 import { genlayerChain } from "@/lib/viem";
 
 type Row = { player: string; maxStep: number };
 
 export default function Leaderboard() {
   const { isConnected } = useAccount();
-
   const [rows, setRows] = useState<Row[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
-  const [errorText, setErrorText] = useState<string>("");
+  const [errorText, setErrorText] = useState("");
 
   const canLoad = useMemo(() => hasValidContractAddress(), []);
+  const contractAddress = useMemo(() => getContractAddress(), []);
 
   async function load() {
     if (!canLoad) return;
@@ -24,9 +23,8 @@ export default function Leaderboard() {
     setErrorText("");
 
     try {
-      // ✅ Используем провайдера кошелька (без CORS)
       const eth = (window as any).ethereum;
-      if (!eth) throw new Error("No wallet provider (window.ethereum). Connect wallet.");
+      if (!eth) throw new Error("No wallet provider");
 
       const client = createPublicClient({
         chain: genlayerChain,
@@ -36,12 +34,10 @@ export default function Leaderboard() {
       const latest = await client.getBlockNumber();
       const fromBlock = latest > 50_000n ? latest - 50_000n : 0n;
 
-      const runFinishedEvent = glassRunAbi.find(
-        (x: any) => x.type === "event" && x.name === "RunFinished"
-      ) as any;
+      const runFinishedEvent = glassRunAbi.find((x: any) => x.type === "event" && x.name === "RunFinished") as any;
 
       const logs = await client.getLogs({
-        address: CONTRACT_ADDRESS as Address,
+        address: contractAddress as Address,
         event: runFinishedEvent,
         fromBlock,
         toBlock: latest,
@@ -72,7 +68,6 @@ export default function Leaderboard() {
 
   useEffect(() => {
     if (isConnected) load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConnected]);
 
   return (
@@ -88,9 +83,7 @@ export default function Leaderboard() {
       </div>
 
       {!canLoad ? (
-        <div className="mt-4 text-sm text-amber-200">
-          Contract address missing/invalid (NEXT_PUBLIC_CONTRACT_ADDRESS).
-        </div>
+        <div className="mt-4 text-sm text-amber-200">{CONTRACT_ADDRESS_RAW ? "Contract address invalid." : "Contract address missing."}</div>
       ) : !isConnected ? (
         <div className="mt-4 text-sm text-white/60">Connect wallet to load leaderboard.</div>
       ) : status === "error" ? (
@@ -106,16 +99,13 @@ export default function Leaderboard() {
             <div>Player</div>
             <div className="text-right">Max step</div>
           </div>
-
           {rows.map((r, i) => (
             <div
               key={r.player}
               className="grid grid-cols-[60px_1fr_100px] px-4 py-3 text-sm text-white/80 border-t border-white/10"
             >
               <div className="text-white/50">{i + 1}</div>
-              <div className="font-mono">
-                {r.player.slice(0, 8)}…{r.player.slice(-6)}
-              </div>
+              <div className="font-mono">{r.player.slice(0, 8)}…{r.player.slice(-6)}</div>
               <div className="text-right font-semibold text-white">{r.maxStep}</div>
             </div>
           ))}
