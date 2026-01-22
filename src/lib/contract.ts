@@ -17,5 +17,5 @@ export const glassRunAbi = parseAbi([
   "function get_run(uint256 run_id) view returns (bool,address,uint32,uint32,bool)",
   "function get_last_jump(uint256 run_id) view returns (string,string,uint32,uint32,bool,uint32)",
   "event RunFinished(address indexed player, uint256 indexed run_id, uint256 max_step)",
-  "event JumpResolved(address indexed player, uint256 indexed run_id, uint32 step, string outcome, string explanation, uint32 confidence_bp, bool alive, uint256 max_step)",
+  "event JumpResolved(address indexed player, uint256 indexed run_id, uint32 step, string outcome, string explanation, uint32 confidence_bp, bool alive, uint256 max_step)"
 ]);
