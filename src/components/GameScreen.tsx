@@ -1,13 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Address,
-  createPublicClient,
-  createWalletClient,
-  custom,
-  decodeEventLog,
-} from "viem";
+import { Address, createPublicClient, createWalletClient, custom } from "viem";
 import { useAccount, useConnect, useDisconnect, useSwitchChain } from "wagmi";
 import { genlayerChain } from "@/lib/viem";
 import { glassRunAbi, hasValidContractAddress, getContractAddress } from "@/lib/contract";
@@ -92,10 +86,19 @@ export default function GameScreen() {
         args: [address as Address],
       });
 
-      if (typeof active !== "bigint") throw new Error("No active run");
-      resetUiForRun(active);
+      const rid = typeof active === "bigint" ? active : 0n;
+      if (rid === 0n) throw new Error("No active run");
+
+      resetUiForRun(rid);
     } catch (e: any) {
-      setError(e?.shortMessage || e?.message || "Failed to start run");
+      const msg =
+        e?.shortMessage ||
+        e?.message ||
+        e?.data?.message ||
+        e?.data?.originalError?.message ||
+        "Failed to start run";
+      setError(msg);
+      console.error(e);
     } finally {
       setBusy(false);
     }
@@ -125,48 +128,35 @@ export default function GameScreen() {
           chain: genlayerChain,
         });
 
-        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        await publicClient.waitForTransactionReceipt({ hash });
 
-        let jr: any | null = null;
+        const last = await publicClient.readContract({
+          address: contractAddress,
+          abi: glassRunAbi,
+          functionName: "get_last_jump",
+          args: [runId],
+        });
 
-        for (const log of receipt.logs) {
-          if (log.address?.toLowerCase() !== contractAddress.toLowerCase()) continue;
-
-          try {
-            const decoded = decodeEventLog({
-              abi: glassRunAbi,
-              data: log.data,
-              topics: log.topics,
-            });
-
-            if (decoded.eventName === "JumpResolved") {
-              const args: any = decoded.args;
-              const evRunId = (args.run_id ?? args.runId) as bigint;
-              if (evRunId === runId) {
-                jr = args;
-                break;
-              }
-            }
-          } catch {}
-        }
-
-        if (!jr) throw new Error("JumpResolved not found");
-
-        const outcome = String(jr.outcome).toUpperCase() as Outcome;
-        const expl = String(jr.explanation ?? "");
-        const confBp = Number(jr.confidence_bp ?? jr.confidenceBp ?? 0);
-        const conf = confBp / 10000;
-
-        const newAlive = Boolean(jr.alive);
-        const newStep = Number(jr.step);
+        const outcome = String((last as any)[0] || "").toUpperCase() as Outcome;
+        const expl = String((last as any)[1] || "");
+        const confBp = Number((last as any)[2] ?? 0);
+        const newStep = Number((last as any)[3] ?? 0);
+        const newAlive = Boolean((last as any)[4] ?? false);
 
         setLastOutcome(outcome);
         setExplanation(expl);
-        setConfidence(conf);
-        setAlive(newAlive);
+        setConfidence(confBp / 10000);
         setStep(newStep);
+        setAlive(newAlive);
       } catch (e: any) {
-        setError(e?.shortMessage || e?.message || "Jump failed");
+        const msg =
+          e?.shortMessage ||
+          e?.message ||
+          e?.data?.message ||
+          e?.data?.originalError?.message ||
+          "Jump failed";
+        setError(msg);
+        console.error(e);
       } finally {
         setBusy(false);
         setPendingChoice(null);
@@ -189,18 +179,19 @@ export default function GameScreen() {
           args: [address as Address],
         });
 
-        if (typeof active === "bigint") {
-          const st = await publicClient.readContract({
-            address: contractAddress,
-            abi: glassRunAbi,
-            functionName: "get_run",
-            args: [active],
-          });
+        const rid = typeof active === "bigint" ? active : 0n;
+        if (rid === 0n) return;
 
-          setRunId(active);
-          setStep(Number((st as any)[2]));
-          setAlive(Boolean((st as any)[4]));
-        }
+        const st = await publicClient.readContract({
+          address: contractAddress,
+          abi: glassRunAbi,
+          functionName: "get_run",
+          args: [rid],
+        });
+
+        setRunId(rid);
+        setStep(Number((st as any)[2] ?? 0));
+        setAlive(Boolean((st as any)[4] ?? false));
       } catch {}
     })();
   }, [address, contractAddress, getClients, hasContract, hasProvider, isConnected]);
