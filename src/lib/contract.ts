@@ -15,6 +15,12 @@ export const glassRunAbi = parseAbi([
   "function jump(uint256 run_id, uint32 step, string choice) returns (uint32)",
   "function get_active_run(address player) view returns (uint256)",
   "function get_run(uint256 run_id) view returns (bool,address,uint32,uint32,bool)",
-  "function get_last_jump(uint256 run_id) view returns (uint32,uint32,uint32,uint32,uint32,bool,uint32)",
+  "function last_outcome_code(uint256 run_id) view returns (uint32)",
+  "function last_roll_bp(uint256 run_id) view returns (uint32)",
+  "function last_p_fall_bp(uint256 run_id) view returns (uint32)",
+  "function last_confidence_bp(uint256 run_id) view returns (uint32)",
+  "function last_step(uint256 run_id) view returns (uint32)",
+  "function last_alive(uint256 run_id) view returns (bool)",
+  "function last_max_step(uint256 run_id) view returns (uint32)",
   "event RunFinished(address indexed player, uint256 indexed run_id, uint256 max_step)"
 ]);
