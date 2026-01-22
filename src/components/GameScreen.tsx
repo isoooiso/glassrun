@@ -137,11 +137,15 @@ export default function GameScreen() {
           args: [runId],
         });
 
-        const outcome = String((last as any)[0] || "").toUpperCase() as Outcome;
-        const expl = String((last as any)[1] || "");
-        const confBp = Number((last as any)[2] ?? 0);
-        const newStep = Number((last as any)[3] ?? 0);
-        const newAlive = Boolean((last as any)[4] ?? false);
+        const outcomeCode = Number((last as any)[0] ?? 0);
+        const rollBp = Number((last as any)[1] ?? 0);
+        const pFallBp = Number((last as any)[2] ?? 0);
+        const confBp = Number((last as any)[3] ?? 0);
+        const newStep = Number((last as any)[4] ?? 0);
+        const newAlive = Boolean((last as any)[5] ?? false);
+
+        const outcome: Outcome = outcomeCode === 2 ? "FALL" : "SAFE";
+        const expl = `roll_bp=${rollBp} vs p_fall_bp=${pFallBp}`;
 
         setLastOutcome(outcome);
         setExplanation(expl);
