@@ -1,3 +1,4 @@
+import ClientOnly from "@/components/ClientOnly";
 import GameScreen from "@/components/GameScreen";
 
 export default function Page() {
@@ -7,19 +8,17 @@ export default function Page() {
         <header className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">GlassRun</h1>
-            <p className="text-white/60">
-              Every jump is decided by AI consensus — on-chain.
-            </p>
+            <p className="text-white/60">Every jump is decided by AI consensus — on-chain.</p>
           </div>
         </header>
 
         <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-          <GameScreen />
+          <ClientOnly>
+            <GameScreen />
+          </ClientOnly>
         </div>
 
-        <footer className="mt-10 text-xs text-white/40">
-          MVP: no bets, no PvP — leaderboard only.
-        </footer>
+        <footer className="mt-10 text-xs text-white/40">MVP: no bets, no PvP — leaderboard only.</footer>
       </div>
     </main>
   );
