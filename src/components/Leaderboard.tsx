@@ -1,32 +1,48 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CONTRACT_ADDRESS, glassRunAbi } from "@/lib/contract";
-import { publicClient } from "@/lib/viem";
-import { Address } from "viem";
+import { Address, createPublicClient, custom } from "viem";
+import { useAccount } from "wagmi";
+import { CONTRACT_ADDRESS, hasValidContractAddress } from "@/lib/contract";
+import { glassRunAbi } from "@/lib/contract";
+import { genlayerChain } from "@/lib/viem";
 
 type Row = { player: string; maxStep: number };
 
 export default function Leaderboard() {
+  const { isConnected } = useAccount();
+
   const [rows, setRows] = useState<Row[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [errorText, setErrorText] = useState<string>("");
 
-  const canLoad = useMemo(() => {
-    return Boolean(CONTRACT_ADDRESS && CONTRACT_ADDRESS.startsWith("0x"));
-  }, []);
+  const canLoad = useMemo(() => hasValidContractAddress(), []);
 
   async function load() {
     if (!canLoad) return;
     setStatus("loading");
+    setErrorText("");
 
     try {
-      const latest = await publicClient.getBlockNumber();
+      // ✅ Используем провайдера кошелька (без CORS)
+      const eth = (window as any).ethereum;
+      if (!eth) throw new Error("No wallet provider (window.ethereum). Connect wallet.");
+
+      const client = createPublicClient({
+        chain: genlayerChain,
+        transport: custom(eth),
+      });
+
+      const latest = await client.getBlockNumber();
       const fromBlock = latest > 50_000n ? latest - 50_000n : 0n;
 
-      // Берём только RunFinished (обновление лидерборда по падению)
-      const logs = await publicClient.getLogs({
+      const runFinishedEvent = glassRunAbi.find(
+        (x: any) => x.type === "event" && x.name === "RunFinished"
+      ) as any;
+
+      const logs = await client.getLogs({
         address: CONTRACT_ADDRESS as Address,
-        event: glassRunAbi.find((x: any) => x.type === "event" && x.name === "RunFinished") as any,
+        event: runFinishedEvent,
         fromBlock,
         toBlock: latest,
       });
@@ -38,7 +54,6 @@ export default function Leaderboard() {
         const player = String(args.player || "").toLowerCase();
         const maxStep = Number(args.max_step ?? args.maxStep ?? 0n);
         if (!player) continue;
-
         best[player] = Math.max(best[player] ?? 0, maxStep);
       }
 
@@ -49,16 +64,16 @@ export default function Leaderboard() {
 
       setRows(list);
       setStatus("idle");
-    } catch (e) {
-      // Частая причина: CORS на RPC
+    } catch (e: any) {
       setStatus("error");
+      setErrorText(e?.message || "Failed to load leaderboard");
     }
   }
 
   useEffect(() => {
-    load();
+    if (isConnected) load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isConnected]);
 
   return (
     <div>
@@ -73,15 +88,14 @@ export default function Leaderboard() {
       </div>
 
       {!canLoad ? (
-        <div className="mt-4 text-sm text-rose-200">
-          Missing/invalid NEXT_PUBLIC_CONTRACT_ADDRESS
+        <div className="mt-4 text-sm text-amber-200">
+          Contract address missing/invalid (NEXT_PUBLIC_CONTRACT_ADDRESS).
         </div>
+      ) : !isConnected ? (
+        <div className="mt-4 text-sm text-white/60">Connect wallet to load leaderboard.</div>
       ) : status === "error" ? (
         <div className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-100">
-          Failed to load logs. Likely RPC CORS blocks browser requests.
-          <div className="mt-1 text-xs text-white/50">
-            Fix: use a CORS-enabled RPC OR add an indexer (server) later.
-          </div>
+          {errorText}
         </div>
       ) : rows.length === 0 ? (
         <div className="mt-4 text-sm text-white/60">No runs yet.</div>
@@ -108,9 +122,7 @@ export default function Leaderboard() {
         </div>
       )}
 
-      <div className="mt-3 text-xs text-white/35">
-        MVP scans last ~50k blocks in-browser.
-      </div>
+      <div className="mt-3 text-xs text-white/35">MVP scans last ~50k blocks.</div>
     </div>
   );
 }
