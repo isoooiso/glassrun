@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Address, decodeEventLog } from "viem";
 import { useAccount, useConnect, useDisconnect, useSwitchChain, useWalletClient } from "wagmi";
-import { publicClient, genlayerChain } from "@/lib/viem";
-import { CONTRACT_ADDRESS, glassRunAbi } from "@/lib/contract";
-import Leaderboard from "./Leaderboard";
+import { genlayerChain, publicClient } from "@/lib/viem";
+import { glassRunAbi, hasValidContractAddress, getContractAddress } from "@/lib/contract";
 import TileChoice from "./TileChoice";
+import Leaderboard from "./Leaderboard";
 
 type Outcome = "SAFE" | "FALL";
 
@@ -18,19 +18,22 @@ export default function GameScreen() {
   const { data: walletClient } = useWalletClient();
 
   const [runId, setRunId] = useState<bigint | null>(null);
-  const [step, setStep] = useState<number>(0);
-  const [alive, setAlive] = useState<boolean>(false);
+  const [step, setStep] = useState(0);
+  const [alive, setAlive] = useState(false);
 
   const [lastOutcome, setLastOutcome] = useState<Outcome | null>(null);
-  const [explanation, setExplanation] = useState<string>("");
-  const [confidence, setConfidence] = useState<number>(0);
+  const [explanation, setExplanation] = useState("");
+  const [confidence, setConfidence] = useState(0);
 
   const [pendingChoice, setPendingChoice] = useState<"LEFT" | "RIGHT" | null>(null);
 
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>("");
+  const [error, setError] = useState("");
 
-  const canPlay = isConnected && walletClient && CONTRACT_ADDRESS;
+  const hasContract = hasValidContractAddress();
+  const canPlay = isConnected && walletClient && hasContract;
+
+  const contractAddress = useMemo(() => getContractAddress(), []);
 
   const ensureChain = useCallback(async () => {
     await switchChainAsync({ chainId: genlayerChain.id });
@@ -48,14 +51,14 @@ export default function GameScreen() {
   }, []);
 
   const startRun = useCallback(async () => {
-    if (!canPlay) return;
+    if (!canPlay || !address) return;
     setBusy(true);
     setError("");
     try {
       await ensureChain();
 
       const hash = await walletClient!.writeContract({
-        address: CONTRACT_ADDRESS,
+        address: contractAddress,
         abi: glassRunAbi,
         functionName: "start_run",
         args: [],
@@ -65,22 +68,21 @@ export default function GameScreen() {
 
       await publicClient.waitForTransactionReceipt({ hash });
 
-      // Надёжно: читаем get_active_run
       const active = await publicClient.readContract({
-        address: CONTRACT_ADDRESS,
+        address: contractAddress,
         abi: glassRunAbi,
         functionName: "get_active_run",
         args: [address as Address],
       });
 
-      if (typeof active !== "bigint") throw new Error("No active run found");
+      if (typeof active !== "bigint") throw new Error("No active run");
       resetUiForRun(active);
     } catch (e: any) {
       setError(e?.shortMessage || e?.message || "Failed to start run");
     } finally {
       setBusy(false);
     }
-  }, [address, canPlay, ensureChain, resetUiForRun, walletClient]);
+  }, [address, canPlay, contractAddress, ensureChain, resetUiForRun, walletClient]);
 
   const jump = useCallback(
     async (choice: "LEFT" | "RIGHT") => {
@@ -97,7 +99,7 @@ export default function GameScreen() {
         const nextStep = step + 1;
 
         const hash = await walletClient!.writeContract({
-          address: CONTRACT_ADDRESS,
+          address: contractAddress,
           abi: glassRunAbi,
           functionName: "jump",
           args: [runId, nextStep, choice],
@@ -107,11 +109,10 @@ export default function GameScreen() {
 
         const receipt = await publicClient.waitForTransactionReceipt({ hash });
 
-        // --- parse JumpResolved from receipt logs ---
         let jr: any | null = null;
 
         for (const log of receipt.logs) {
-          if (log.address?.toLowerCase() !== CONTRACT_ADDRESS.toLowerCase()) continue;
+          if (log.address?.toLowerCase() !== contractAddress.toLowerCase()) continue;
 
           try {
             const decoded = decodeEventLog({
@@ -123,18 +124,15 @@ export default function GameScreen() {
             if (decoded.eventName === "JumpResolved") {
               const args: any = decoded.args;
               const evRunId = (args.run_id ?? args.runId) as bigint;
-
               if (evRunId === runId) {
                 jr = args;
                 break;
               }
             }
-          } catch {
-            // ignore
-          }
+          } catch {}
         }
 
-        if (!jr) throw new Error("JumpResolved event not found in receipt logs");
+        if (!jr) throw new Error("JumpResolved not found");
 
         const outcome = String(jr.outcome).toUpperCase() as Outcome;
         const expl = String(jr.explanation ?? "");
@@ -156,16 +154,15 @@ export default function GameScreen() {
         setPendingChoice(null);
       }
     },
-    [alive, canPlay, ensureChain, runId, step, walletClient]
+    [alive, canPlay, contractAddress, ensureChain, runId, step, walletClient]
   );
 
-  // Подхватить активный ранн при перезагрузке
   useEffect(() => {
     (async () => {
-      if (!isConnected || !address || !CONTRACT_ADDRESS) return;
+      if (!isConnected || !address || !hasContract) return;
       try {
         const active = await publicClient.readContract({
-          address: CONTRACT_ADDRESS,
+          address: contractAddress,
           abi: glassRunAbi,
           functionName: "get_active_run",
           args: [address as Address],
@@ -173,22 +170,19 @@ export default function GameScreen() {
 
         if (typeof active === "bigint") {
           const st = await publicClient.readContract({
-            address: CONTRACT_ADDRESS,
+            address: contractAddress,
             abi: glassRunAbi,
             functionName: "get_run",
             args: [active],
           });
 
-          // st: (exists, player, step, max_step, alive)
           setRunId(active);
           setStep(Number((st as any)[2]));
           setAlive(Boolean((st as any)[4]));
         }
-      } catch {
-        // ignore
-      }
+      } catch {}
     })();
-  }, [address, isConnected]);
+  }, [address, contractAddress, hasContract, isConnected]);
 
   const connectBtn = useMemo(() => {
     const connector = connectors?.[0];
@@ -226,6 +220,12 @@ export default function GameScreen() {
           </div>
           {connectBtn}
         </div>
+
+        {!hasContract && (
+          <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+            Contract address missing/invalid.
+          </div>
+        )}
 
         <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className="glass-soft p-4">
@@ -269,9 +269,6 @@ export default function GameScreen() {
                 <div className="text-sm">
                   Run ended at step <span className="font-semibold text-white">{step}</span>.
                 </div>
-                <div className="mt-1 text-xs text-white/50">
-                  Leaderboard updates after RunFinished logs are visible to RPC.
-                </div>
               </div>
               <button className="btn w-full" disabled={!canPlay || busy} onClick={startRun}>
                 {busy ? "Starting..." : "Start New Run"}
@@ -282,8 +279,7 @@ export default function GameScreen() {
 
         {(explanation || confidence) && (
           <div className="mt-4 text-sm text-white/60">
-            {explanation}{" "}
-            <span className="text-white/40">(conf: {confidence.toFixed(2)})</span>
+            {explanation} <span className="text-white/40">(conf: {confidence.toFixed(2)})</span>
           </div>
         )}
 
