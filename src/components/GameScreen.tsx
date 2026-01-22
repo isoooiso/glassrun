@@ -31,7 +31,7 @@ export default function GameScreen() {
   const [error, setError] = useState("");
 
   const hasContract = hasValidContractAddress();
-  const canPlay = isConnected && walletClient && hasContract;
+  const canPlay = isConnected && !!walletClient && hasContract;
 
   const contractAddress = useMemo(() => getContractAddress(), []);
 
@@ -52,8 +52,10 @@ export default function GameScreen() {
 
   const startRun = useCallback(async () => {
     if (!canPlay || !address) return;
+
     setBusy(true);
     setError("");
+
     try {
       await ensureChain();
 
@@ -160,6 +162,7 @@ export default function GameScreen() {
   useEffect(() => {
     (async () => {
       if (!isConnected || !address || !hasContract) return;
+
       try {
         const active = await publicClient.readContract({
           address: contractAddress,
@@ -208,6 +211,14 @@ export default function GameScreen() {
     );
   }, [address, connect, connectors, disconnect, isConnectPending, isConnected]);
 
+  const missing = useMemo(() => {
+    const parts: string[] = [];
+    if (!hasContract) parts.push("contract");
+    if (!isConnected) parts.push("wallet");
+    if (isConnected && !walletClient) parts.push("walletClient");
+    return parts.join(", ");
+  }, [hasContract, isConnected, walletClient]);
+
   return (
     <>
       <section className="glass p-5">
@@ -221,9 +232,9 @@ export default function GameScreen() {
           {connectBtn}
         </div>
 
-        {!hasContract && (
+        {!canPlay && (
           <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
-            Contract address missing/invalid.
+            Cannot play: {missing || "unknown"}
           </div>
         )}
 
