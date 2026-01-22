@@ -1,9 +1,13 @@
-import { parseAbi } from "viem";
+import { Address, parseAbi } from "viem";
 
-export const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "";
+export const CONTRACT_ADDRESS_RAW = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "";
 
 export function hasValidContractAddress() {
-  return CONTRACT_ADDRESS.startsWith("0x") && CONTRACT_ADDRESS.length === 42;
+  return CONTRACT_ADDRESS_RAW.startsWith("0x") && CONTRACT_ADDRESS_RAW.length === 42;
+}
+
+export function getContractAddress(): Address {
+  return CONTRACT_ADDRESS_RAW as Address;
 }
 
 export const glassRunAbi = parseAbi([
