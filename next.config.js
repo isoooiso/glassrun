@@ -1,11 +1,9 @@
-/** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "export",
   images: { unoptimized: true },
   basePath: "/glassrun",
   assetPrefix: "/glassrun",
   trailingSlash: true,
-
   webpack: (config) => {
     config.resolve.alias = {
       ...(config.resolve.alias || {}),
