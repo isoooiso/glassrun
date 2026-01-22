@@ -1,9 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Address, decodeEventLog } from "viem";
-import { useAccount, useConnect, useDisconnect, useSwitchChain, useWalletClient } from "wagmi";
-import { genlayerChain, publicClient } from "@/lib/viem";
+import {
+  Address,
+  createPublicClient,
+  createWalletClient,
+  custom,
+  decodeEventLog,
+} from "viem";
+import { useAccount, useConnect, useDisconnect, useSwitchChain } from "wagmi";
+import { genlayerChain } from "@/lib/viem";
 import { glassRunAbi, hasValidContractAddress, getContractAddress } from "@/lib/contract";
 import TileChoice from "./TileChoice";
 import Leaderboard from "./Leaderboard";
@@ -15,7 +21,6 @@ export default function GameScreen() {
   const { connect, connectors, isPending: isConnectPending } = useConnect();
   const { disconnect } = useDisconnect();
   const { switchChainAsync } = useSwitchChain();
-  const { data: walletClient } = useWalletClient();
 
   const [runId, setRunId] = useState<bigint | null>(null);
   const [step, setStep] = useState(0);
@@ -31,9 +36,17 @@ export default function GameScreen() {
   const [error, setError] = useState("");
 
   const hasContract = hasValidContractAddress();
-  const canPlay = isConnected && !!walletClient && hasContract;
-
   const contractAddress = useMemo(() => getContractAddress(), []);
+  const hasProvider = typeof window !== "undefined" && !!(window as any).ethereum;
+
+  const canPlay = isConnected && hasContract && hasProvider && !!address;
+
+  const getClients = useCallback(() => {
+    const eth = (window as any).ethereum;
+    const publicClient = createPublicClient({ chain: genlayerChain, transport: custom(eth) });
+    const walletClient = createWalletClient({ chain: genlayerChain, transport: custom(eth) });
+    return { publicClient, walletClient };
+  }, []);
 
   const ensureChain = useCallback(async () => {
     await switchChainAsync({ chainId: genlayerChain.id });
@@ -59,12 +72,14 @@ export default function GameScreen() {
     try {
       await ensureChain();
 
-      const hash = await walletClient!.writeContract({
+      const { publicClient, walletClient } = getClients();
+
+      const hash = await walletClient.writeContract({
         address: contractAddress,
         abi: glassRunAbi,
         functionName: "start_run",
         args: [],
-        account: walletClient!.account!,
+        account: address as Address,
         chain: genlayerChain,
       });
 
@@ -84,11 +99,11 @@ export default function GameScreen() {
     } finally {
       setBusy(false);
     }
-  }, [address, canPlay, contractAddress, ensureChain, resetUiForRun, walletClient]);
+  }, [address, canPlay, contractAddress, ensureChain, getClients, resetUiForRun]);
 
   const jump = useCallback(
     async (choice: "LEFT" | "RIGHT") => {
-      if (!canPlay || !runId || !alive) return;
+      if (!canPlay || !runId || !alive || !address) return;
 
       setBusy(true);
       setError("");
@@ -98,14 +113,15 @@ export default function GameScreen() {
       try {
         await ensureChain();
 
+        const { publicClient, walletClient } = getClients();
         const nextStep = step + 1;
 
-        const hash = await walletClient!.writeContract({
+        const hash = await walletClient.writeContract({
           address: contractAddress,
           abi: glassRunAbi,
           functionName: "jump",
           args: [runId, nextStep, choice],
-          account: walletClient!.account!,
+          account: address as Address,
           chain: genlayerChain,
         });
 
@@ -156,14 +172,16 @@ export default function GameScreen() {
         setPendingChoice(null);
       }
     },
-    [alive, canPlay, contractAddress, ensureChain, runId, step, walletClient]
+    [address, alive, canPlay, contractAddress, ensureChain, getClients, runId, step]
   );
 
   useEffect(() => {
     (async () => {
-      if (!isConnected || !address || !hasContract) return;
+      if (!isConnected || !address || !hasContract || !hasProvider) return;
 
       try {
+        const { publicClient } = getClients();
+
         const active = await publicClient.readContract({
           address: contractAddress,
           abi: glassRunAbi,
@@ -185,7 +203,7 @@ export default function GameScreen() {
         }
       } catch {}
     })();
-  }, [address, contractAddress, hasContract, isConnected]);
+  }, [address, contractAddress, getClients, hasContract, hasProvider, isConnected]);
 
   const connectBtn = useMemo(() => {
     const connector = connectors?.[0];
@@ -215,9 +233,10 @@ export default function GameScreen() {
     const parts: string[] = [];
     if (!hasContract) parts.push("contract");
     if (!isConnected) parts.push("wallet");
-    if (isConnected && !walletClient) parts.push("walletClient");
+    if (!hasProvider) parts.push("provider");
+    if (!address) parts.push("address");
     return parts.join(", ");
-  }, [hasContract, isConnected, walletClient]);
+  }, [address, hasContract, hasProvider, isConnected]);
 
   return (
     <>
