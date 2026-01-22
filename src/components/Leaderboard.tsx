@@ -32,7 +32,7 @@ export default function Leaderboard() {
       });
 
       const latest = await client.getBlockNumber();
-      const fromBlock = latest > 50_000n ? latest - 50_000n : 0n;
+      const fromBlock = latest > 5_000n ? latest - 5_000n : 0n;
 
       const runFinishedEvent = glassRunAbi.find((x: any) => x.type === "event" && x.name === "RunFinished") as any;
 
@@ -63,6 +63,7 @@ export default function Leaderboard() {
     } catch (e: any) {
       setStatus("error");
       setErrorText(e?.message || "Failed to load leaderboard");
+      console.error(e);
     }
   }
 
@@ -112,7 +113,7 @@ export default function Leaderboard() {
         </div>
       )}
 
-      <div className="mt-3 text-xs text-white/35">MVP scans last ~50k blocks.</div>
+      <div className="mt-3 text-xs text-white/35">Scans last ~5k blocks.</div>
     </div>
   );
 }
