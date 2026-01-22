@@ -26,8 +26,16 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Install
-        run: npm ci
+      - name: Install (ci with fallback)
+        run: |
+          npm config set fund false
+          npm config set audit false
+          npm config set fetch-retries 5
+          npm config set fetch-retry-factor 2
+          npm config set fetch-retry-mintimeout 20000
+          npm config set fetch-retry-maxtimeout 120000
+          npm config set fetch-timeout 300000
+          npm ci || npm install
 
       - name: Build (static export)
         env:
@@ -37,7 +45,6 @@ jobs:
           NEXT_PUBLIC_CHAIN_NAME: ${{ vars.NEXT_PUBLIC_CHAIN_NAME }}
         run: npm run build
 
-      # ✅ чтобы сразу увидеть причину 404: есть ли out/index.html
       - name: Verify export output
         run: |
           test -f out/index.html
@@ -57,4 +64,3 @@ jobs:
     steps:
       - name: Deploy
         uses: actions/deploy-pages@v4
-
