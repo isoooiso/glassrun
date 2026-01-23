@@ -46,16 +46,89 @@ export default function GameScreen() {
     await switchChainAsync({ chainId: genlayerChain.id });
   }, [switchChainAsync]);
 
-  const resetUiForRun = useCallback((newRunId: bigint) => {
-    setRunId(newRunId);
-    setStep(0);
-    setAlive(true);
-    setLastOutcome(null);
-    setExplanation("");
-    setConfidence(0);
-    setPendingChoice(null);
-    setError("");
-  }, []);
+  const syncFromChain = useCallback(
+    async (rid: bigint) => {
+      const { publicClient } = getClients();
+
+      const st = await publicClient.readContract({
+        address: contractAddress,
+        abi: glassRunAbi,
+        functionName: "get_run",
+        args: [rid],
+      });
+
+      const chainStep = Number((st as any)[2] ?? 0);
+      const chainAlive = Boolean((st as any)[4] ?? false);
+
+      setRunId(rid);
+      setStep(chainStep);
+      setAlive(chainAlive);
+
+      const [outcomeCode, rollBp, pFallBp, confBp, lastStep, lastAlive] = await Promise.all([
+        publicClient.readContract({
+          address: contractAddress,
+          abi: glassRunAbi,
+          functionName: "last_outcome_code",
+          args: [rid],
+        }),
+        publicClient.readContract({
+          address: contractAddress,
+          abi: glassRunAbi,
+          functionName: "last_roll_bp",
+          args: [rid],
+        }),
+        publicClient.readContract({
+          address: contractAddress,
+          abi: glassRunAbi,
+          functionName: "last_p_fall_bp",
+          args: [rid],
+        }),
+        publicClient.readContract({
+          address: contractAddress,
+          abi: glassRunAbi,
+          functionName: "last_confidence_bp",
+          args: [rid],
+        }),
+        publicClient.readContract({
+          address: contractAddress,
+          abi: glassRunAbi,
+          functionName: "last_step",
+          args: [rid],
+        }),
+        publicClient.readContract({
+          address: contractAddress,
+          abi: glassRunAbi,
+          functionName: "last_alive",
+          args: [rid],
+        }),
+      ]);
+
+      const oc = Number(outcomeCode ?? 0);
+      const rb = Number(rollBp ?? 0);
+      const pf = Number(pFallBp ?? 0);
+      const cb = Number(confBp ?? 0);
+      const ls = Number(lastStep ?? 0);
+      const la = Boolean(lastAlive ?? false);
+
+      if (ls > 0) {
+        const outcome: Outcome = oc === 2 ? "FALL" : "SAFE";
+        const expl = `roll_bp=${rb} vs p_fall_bp=${pf}`;
+        setLastOutcome(outcome);
+        setExplanation(expl);
+        setConfidence(cb / 10000);
+        setAlive(la);
+        setStep(ls);
+      } else {
+        setLastOutcome(null);
+        setExplanation("");
+        setConfidence(0);
+      }
+
+      setAlive(chainAlive);
+      setStep(chainStep);
+    },
+    [contractAddress, getClients]
+  );
 
   const startRun = useCallback(async () => {
     if (!canPlay || !address) return;
@@ -89,7 +162,9 @@ export default function GameScreen() {
       const rid = typeof active === "bigint" ? active : 0n;
       if (rid === 0n) throw new Error("No active run");
 
-      resetUiForRun(rid);
+      await syncFromChain(rid);
+      setPendingChoice(null);
+      setError("");
     } catch (e: any) {
       const msg =
         e?.shortMessage ||
@@ -102,11 +177,11 @@ export default function GameScreen() {
     } finally {
       setBusy(false);
     }
-  }, [address, canPlay, contractAddress, ensureChain, getClients, resetUiForRun]);
+  }, [address, canPlay, contractAddress, ensureChain, getClients, syncFromChain]);
 
   const jump = useCallback(
     async (choice: "LEFT" | "RIGHT") => {
-      if (!canPlay || !runId || !alive || !address) return;
+      if (!canPlay || !runId || !address) return;
 
       setBusy(true);
       setError("");
@@ -117,7 +192,24 @@ export default function GameScreen() {
         await ensureChain();
 
         const { publicClient, walletClient } = getClients();
-        const nextStep = step + 1;
+
+        const st = await publicClient.readContract({
+          address: contractAddress,
+          abi: glassRunAbi,
+          functionName: "get_run",
+          args: [runId],
+        });
+
+        const chainAlive = Boolean((st as any)[4] ?? false);
+        const chainStep = Number((st as any)[2] ?? 0);
+        if (!chainAlive) {
+          setAlive(false);
+          setBusy(false);
+          setPendingChoice(null);
+          return;
+        }
+
+        const nextStep = BigInt(chainStep + 1);
 
         const hash = await walletClient.writeContract({
           address: contractAddress,
@@ -130,67 +222,7 @@ export default function GameScreen() {
 
         await publicClient.waitForTransactionReceipt({ hash });
 
-        const [
-          outcomeCode,
-          rollBp,
-          pFallBp,
-          confBp,
-          newStep,
-          newAlive,
-        ] = await Promise.all([
-          publicClient.readContract({
-            address: contractAddress,
-            abi: glassRunAbi,
-            functionName: "last_outcome_code",
-            args: [runId],
-          }),
-          publicClient.readContract({
-            address: contractAddress,
-            abi: glassRunAbi,
-            functionName: "last_roll_bp",
-            args: [runId],
-          }),
-          publicClient.readContract({
-            address: contractAddress,
-            abi: glassRunAbi,
-            functionName: "last_p_fall_bp",
-            args: [runId],
-          }),
-          publicClient.readContract({
-            address: contractAddress,
-            abi: glassRunAbi,
-            functionName: "last_confidence_bp",
-            args: [runId],
-          }),
-          publicClient.readContract({
-            address: contractAddress,
-            abi: glassRunAbi,
-            functionName: "last_step",
-            args: [runId],
-          }),
-          publicClient.readContract({
-            address: contractAddress,
-            abi: glassRunAbi,
-            functionName: "last_alive",
-            args: [runId],
-          }),
-        ]);
-
-        const oc = Number(outcomeCode ?? 0);
-        const rb = Number(rollBp ?? 0);
-        const pf = Number(pFallBp ?? 0);
-        const cb = Number(confBp ?? 0);
-        const ns = Number(newStep ?? 0);
-        const na = Boolean(newAlive ?? false);
-
-        const outcome: Outcome = oc === 2 ? "FALL" : "SAFE";
-        const expl = `roll_bp=${rb} vs p_fall_bp=${pf}`;
-
-        setLastOutcome(outcome);
-        setExplanation(expl);
-        setConfidence(cb / 10000);
-        setStep(ns);
-        setAlive(na);
+        await syncFromChain(runId);
       } catch (e: any) {
         const msg =
           e?.shortMessage ||
@@ -205,7 +237,7 @@ export default function GameScreen() {
         setPendingChoice(null);
       }
     },
-    [address, alive, canPlay, contractAddress, ensureChain, getClients, runId, step]
+    [address, canPlay, contractAddress, ensureChain, getClients, runId, syncFromChain]
   );
 
   useEffect(() => {
@@ -225,19 +257,10 @@ export default function GameScreen() {
         const rid = typeof active === "bigint" ? active : 0n;
         if (rid === 0n) return;
 
-        const st = await publicClient.readContract({
-          address: contractAddress,
-          abi: glassRunAbi,
-          functionName: "get_run",
-          args: [rid],
-        });
-
-        setRunId(rid);
-        setStep(Number((st as any)[2] ?? 0));
-        setAlive(Boolean((st as any)[4] ?? false));
+        await syncFromChain(rid);
       } catch {}
     })();
-  }, [address, contractAddress, getClients, hasContract, hasProvider, isConnected]);
+  }, [address, contractAddress, getClients, hasContract, hasProvider, isConnected, syncFromChain]);
 
   const connectBtn = useMemo(() => {
     const connector = connectors?.[0];
@@ -294,69 +317,4 @@ export default function GameScreen() {
         <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className="glass-soft p-4">
             <div className="text-xs text-white/50">Run ID</div>
-            <div className="mt-1 font-mono text-sm">{runId ? runId.toString() : "—"}</div>
-          </div>
-          <div className="glass-soft p-4">
-            <div className="text-xs text-white/50">Step</div>
-            <div className="mt-1 text-2xl font-semibold">{step}</div>
-          </div>
-          <div className="glass-soft p-4">
-            <div className="text-xs text-white/50">Last outcome</div>
-            <div className="mt-1 text-lg font-medium">
-              {lastOutcome ? (
-                <span className={lastOutcome === "SAFE" ? "text-emerald-300" : "text-rose-300"}>
-                  {lastOutcome}
-                </span>
-              ) : (
-                "—"
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-6">
-          {!runId ? (
-            <button className="btn w-full" disabled={!canPlay || busy} onClick={startRun}>
-              {busy ? "Starting..." : "Start Run"}
-            </button>
-          ) : alive ? (
-            <TileChoice
-              disabled={!canPlay || busy}
-              onLeft={() => jump("LEFT")}
-              onRight={() => jump("RIGHT")}
-              outcome={lastOutcome}
-              pendingChoice={pendingChoice}
-            />
-          ) : (
-            <div className="grid gap-3">
-              <div className="glass-soft p-4 text-white/70">
-                <div className="text-sm">
-                  Run ended at step <span className="font-semibold text-white">{step}</span>.
-                </div>
-              </div>
-              <button className="btn w-full" disabled={!canPlay || busy} onClick={startRun}>
-                {busy ? "Starting..." : "Start New Run"}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {(explanation || confidence) && (
-          <div className="mt-4 text-sm text-white/60">
-            {explanation} <span className="text-white/40">(conf: {confidence.toFixed(2)})</span>
-          </div>
-        )}
-
-        {error && (
-          <div className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-100">
-            {error}
-          </div>
-        )}
-      </section>
-
-      <section className="glass p-5">
-        <Leaderboard />
-      </section>
-    </>
-  );
-}
+            <div className="mt-1 font-mono text-sm"
