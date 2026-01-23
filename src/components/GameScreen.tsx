@@ -317,4 +317,69 @@ export default function GameScreen() {
         <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className="glass-soft p-4">
             <div className="text-xs text-white/50">Run ID</div>
-            <div className="mt-1 font-mono text-sm"
+            <div className="mt-1 font-mono text-sm">{runId ? runId.toString() : "—"}</div>
+          </div>
+          <div className="glass-soft p-4">
+            <div className="text-xs text-white/50">Step</div>
+            <div className="mt-1 text-2xl font-semibold">{step}</div>
+          </div>
+          <div className="glass-soft p-4">
+            <div className="text-xs text-white/50">Last outcome</div>
+            <div className="mt-1 text-lg font-medium">
+              {lastOutcome ? (
+                <span className={lastOutcome === "SAFE" ? "text-emerald-300" : "text-rose-300"}>
+                  {lastOutcome}
+                </span>
+              ) : (
+                "—"
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6">
+          {!runId ? (
+            <button className="btn w-full" disabled={!canPlay || busy} onClick={startRun}>
+              {busy ? "Starting..." : "Start Run"}
+            </button>
+          ) : alive ? (
+            <TileChoice
+              disabled={!canPlay || busy}
+              onLeft={() => jump("LEFT")}
+              onRight={() => jump("RIGHT")}
+              outcome={lastOutcome}
+              pendingChoice={pendingChoice}
+            />
+          ) : (
+            <div className="grid gap-3">
+              <div className="glass-soft p-4 text-white/70">
+                <div className="text-sm">
+                  Run ended at step <span className="font-semibold text-white">{step}</span>.
+                </div>
+              </div>
+              <button className="btn w-full" disabled={!canPlay || busy} onClick={startRun}>
+                {busy ? "Starting..." : "Start New Run"}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {(explanation || confidence) && (
+          <div className="mt-4 text-sm text-white/60">
+            {explanation} <span className="text-white/40">(conf: {confidence.toFixed(2)})</span>
+          </div>
+        )}
+
+        {error && (
+          <div className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-100">
+            {error}
+          </div>
+        )}
+      </section>
+
+      <section className="glass p-5">
+        <Leaderboard />
+      </section>
+    </>
+  );
+}
