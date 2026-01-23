@@ -209,7 +209,7 @@ export default function GameScreen() {
           return;
         }
 
-        const nextStep = BigInt(chainStep + 1);
+        const nextStep = (chainStep + 1) >>> 0;
 
         const hash = await walletClient.writeContract({
           address: contractAddress,
@@ -219,6 +219,7 @@ export default function GameScreen() {
           account: address as Address,
           chain: genlayerChain,
         });
+
 
         await publicClient.waitForTransactionReceipt({ hash });
 
@@ -383,3 +384,4 @@ export default function GameScreen() {
     </>
   );
 }
+
