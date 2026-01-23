@@ -130,28 +130,67 @@ export default function GameScreen() {
 
         await publicClient.waitForTransactionReceipt({ hash });
 
-        const last = await publicClient.readContract({
-          address: contractAddress,
-          abi: glassRunAbi,
-          functionName: "get_last_jump",
-          args: [runId],
-        });
+        const [
+          outcomeCode,
+          rollBp,
+          pFallBp,
+          confBp,
+          newStep,
+          newAlive,
+        ] = await Promise.all([
+          publicClient.readContract({
+            address: contractAddress,
+            abi: glassRunAbi,
+            functionName: "last_outcome_code",
+            args: [runId],
+          }),
+          publicClient.readContract({
+            address: contractAddress,
+            abi: glassRunAbi,
+            functionName: "last_roll_bp",
+            args: [runId],
+          }),
+          publicClient.readContract({
+            address: contractAddress,
+            abi: glassRunAbi,
+            functionName: "last_p_fall_bp",
+            args: [runId],
+          }),
+          publicClient.readContract({
+            address: contractAddress,
+            abi: glassRunAbi,
+            functionName: "last_confidence_bp",
+            args: [runId],
+          }),
+          publicClient.readContract({
+            address: contractAddress,
+            abi: glassRunAbi,
+            functionName: "last_step",
+            args: [runId],
+          }),
+          publicClient.readContract({
+            address: contractAddress,
+            abi: glassRunAbi,
+            functionName: "last_alive",
+            args: [runId],
+          }),
+        ]);
 
-        const outcomeCode = Number((last as any)[0] ?? 0);
-        const rollBp = Number((last as any)[1] ?? 0);
-        const pFallBp = Number((last as any)[2] ?? 0);
-        const confBp = Number((last as any)[3] ?? 0);
-        const newStep = Number((last as any)[4] ?? 0);
-        const newAlive = Boolean((last as any)[5] ?? false);
+        const oc = Number(outcomeCode ?? 0);
+        const rb = Number(rollBp ?? 0);
+        const pf = Number(pFallBp ?? 0);
+        const cb = Number(confBp ?? 0);
+        const ns = Number(newStep ?? 0);
+        const na = Boolean(newAlive ?? false);
 
-        const outcome: Outcome = outcomeCode === 2 ? "FALL" : "SAFE";
-        const expl = `roll_bp=${rollBp} vs p_fall_bp=${pFallBp}`;
+        const outcome: Outcome = oc === 2 ? "FALL" : "SAFE";
+        const expl = `roll_bp=${rb} vs p_fall_bp=${pf}`;
 
         setLastOutcome(outcome);
         setExplanation(expl);
-        setConfidence(confBp / 10000);
-        setStep(newStep);
-        setAlive(newAlive);
+        setConfidence(cb / 10000);
+        setStep(ns);
+        setAlive(na);
       } catch (e: any) {
         const msg =
           e?.shortMessage ||
